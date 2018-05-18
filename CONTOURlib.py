@@ -172,7 +172,7 @@ def ExtractBoundGradChange(poly_contours):
     dtheta_xmax=[]
     dtheta_ymax=[]
     
-    #Calculate the thickness of the CT slices
+    #Calculate the thickness of the CT slices (hard-coded: t=1.25 mm)
     t=1.25
     
     #Extract x and y boundaries for each slice contour
@@ -251,35 +251,43 @@ def NumSlicesContoured(polyA,polyB):
   
   return num_tot_slices
 
+def FindSameSlices(polyA,polyB):
+    #FUNCTION FINDSAMESLICES: Returns the z-slice index of polygon B that is the same
+    #with polygon A. This is needed in order to since the two structures might 
+    #not have contours always on the same slice.
+    
+    indA=[]
+    indB=[]
+    
+    for j in range(len(polyA['z-slice'])):
+     for i in range(len(polyB['z-slice'])): 
+        if polyA['z-slice'][j]==polyB['z-slice'][i]:
+            indA.append(j)
+            indB.append(i)
+            break       
+        
+    num_sl=len(indA)
+    
+    return indA,indB,num_sl
+  
+  
+
 def ExtractIntersectionPoly(polyA,polyB):
   indB=[]
-  num_slices_found=0
   polyABinter={}
   
   
   polyABinter['polygons']=[]
   polyABinter['z-slice']=[]
     
-    
-  #First find the number of total slices contoured by any structure.
-  #Now find the slices of polyB that have the same z coordinate as polyA. 
-  #These are the slices that we find contours of both structures.
+  #First find the slices that are common
+  indA,indB,num_slices=FindSameSlices(polyA,polyB)
   
-  for z in polyA['z-slice']:
-    found_slice=0
-    for i in range(len(polyB['z-slice'])): 
-        if z==polyB['z-slice'][i]:
-            found_slice=1
-            break
-    num_slices_found+=found_slice               
-    indB.append(i)
-  
-  
-  #Now find the intersection for all the slices that agree and create a new polygon list. 
-  for i in range(len(polyA['polygons'])):
-    pA=polyA['polygons'][i]
+  #Now find the intersection for all the slices that are in common and create a new polygon list. 
+  for i in range(num_slices):
+    pA=polyA['polygons'][indA[i]]
     pB=polyB['polygons'][indB[i]]
-    z=polyB['z-slice'][indB[i]]
+    z=polyA['z-slice'][indA[i]]
     i=pA.intersection(pB)
     
     polyABinter['polygons'].append(i)
@@ -294,27 +302,47 @@ def ExtractUnionPoly(polyA,polyB):
     polyABunion['polygons']=[]
     polyABunion['z-slice']=[]
  
-  #Now find the slices of polyB that have the same z coordinate as polyA. 
-  #These are the slices that we find contours of both structures.
-  
-    for z in polyA['z-slice']:
-     for i in range(len(polyB['z-slice'])): 
-        if z==polyB['z-slice'][i]:
-            break
-     indB.append(i)
-    
-    
+    #First find the slices that are common
+    indA,indB,num_slices=FindSameSlices(polyA,polyB)
+        
     #Now find the intersection and union area for all the slices that agree. 
-    for i in range(len(polyA['polygons'])):
-         pA=polyA['polygons'][i]
+    for i in range(num_slices):
+         pA=polyA['polygons'][indA[i]]
          pB=polyB['polygons'][indB[i]]
-         z=polyB['z-slice'][indB[i]]
+         z=polyA['z-slice'][indA[i]]
          u=pA.union(pB)
         
          polyABunion['polygons'].append(u)
          polyABunion['z-slice'].append(z)
   
     return polyABunion
+
+def HausdorffMetrics(polyA,polyB):
+  #FUNCTION HAUSDORFF: Calculates the Haussdorff distances for each contour slice
+  # between two polygon lists. Returns the max,mean and std of all Hausdorf distances.
+  #Hausdorff distance is defined as: maximum distance of the closest point between
+  #two contours.    
+  
+  #Initialization
+    indB=[]
+    H=[]  
+    
+    #First find the slices that are common
+    indA,indB,num_slices=FindSameSlices(polyA,polyB)
+    
+    #Now calculate the Hausdorff distance of the contours for each slice
+    for i in range(num_slices):
+         pA=polyA['polygons'][indA[i]]
+         pB=polyB['polygons'][indB[i]]
+         htemp=pA.hausdorff_distance(pB)
+         H.append(htemp)
+    
+    #Now calculate the max, mean and std of Hausdorff distances. Return it as a list.
+    Hdmax=np.max(H)
+    Hdmean=np.mean(H)
+    Hdstd=np.std(H)
+        
+    return [Hdmax,Hdmean,Hdstd]
 
 def Jaccard(poly):
     #function Jaccard: returns the Jaccard index of a list of polygons ('poly').
@@ -323,6 +351,10 @@ def Jaccard(poly):
     poly_inter=0
     poly_union=0
     jac_ind=[]
+    weights=[]
+    sum_area=0
+    Jaccard_wav=0
+    Jaccard_av=0
     
     #first extract the intersection and union of each slice for the first two 
     #polygons in the list. Then calculate the Jaccard index as the ratio 
@@ -340,57 +372,126 @@ def Jaccard(poly):
             inter_area=poly_inter['polygons'][i].area
             union_area=poly_union['polygons'][i].area
             jac_ind.append(inter_area/union_area)
+            weights.append(union_area)
+            sum_area+=union_area
     else:
         for i in range(len(poly_inter['polygons'])):
             inter_area=poly_inter['polygons'][i].area
             union_area=poly_union['polygons'][i].area
             jac_ind.append(inter_area/union_area)
+            weights.append(union_area)
+            sum_area+=union_area
+    
+    # Now calculate the weighted average Jaccard index. The weihgts are calculated 
+    # as the ratio: contoured area per slice/total contoured area.
+      
+        
+    weights=[w/sum_area for w in weights]
+        
+    for i in range(len(weights)):
+        Jaccard_wav+=weights[i]*jac_ind[i]
+        
+    Jaccard_wav=Jaccard_wav/sum(weights)
     Jaccard_av=np.mean(jac_ind)
     
-    return jac_ind,Jaccard_av
-
+    return jac_ind,Jaccard_av,Jaccard_wav
+    
+def HausdorffDict(poly):
+    #FUNCTION HAUSDORFF POLY(): 
+    #Given a series of structures (polygon lists) contoured by a physician 
+    #returns the max, mean and std Haussdorf distance for all combinations 
+    #(order selection does not matter here). For example calculates Haussdorf 
+    #for structure 1 with 2,3.. structure 2 with 3,4..etc etc
+    #INPUT: poly is a list of Polygon contour objects as created by the CreatePolygon() method.
+    #OUTPUT: Dictionary with derived hausdorff metrics (max,mean,std) for each comparison performed. 
+    #Thus, the length of each key in the dictionary should be equal to the total number 
+    # of combinations possible. 
+    
+    
+    #Initialization
+    num_of_str=len(poly)
+    Haus_dict={}
+    Haus_dict['max']=[]
+    Haus_dict['mean']=[]
+    Haus_dict['std']=[]
+    
+    
+    # We first perform a loop over all structures (num_of_str). For each structure (i) we will
+    #calculate the Hausdorff distance to the remaining structures in the list
+    #num_of_str - (i+1)  (i+1 because first index starts with 0 at python).
+    #Return then the metrics (max,mean,std) in a dictionary. 
+    
+    for i in range(num_of_str):
+        
+        for j in range(num_of_str-(i+1)):
+            
+            j+=i+1
+            Haus=HausdorffMetrics(poly[i],poly[j])
+            Haus_dict['max'].append(Haus[0])
+            Haus_dict['mean'].append(Haus[1])
+            Haus_dict['std'].append(Haus[2])
+            
+            
+    return Haus_dict
+        
 def main():
     
+    ########## INITIALIZATION ##############
     poly=[]
     DGrad_av=[]
     vol=[]
     
         
-    ############## User input & communication ##################  
+    ############## USER INPUT ##############  
     dcm_list=input('Provide the names of all dicom files to be analyzed (format dcm1,dcm2,dcm3,...) \n')
-    #roi_list=input('Provide the names of the structures contoured in each dicom file: roi1,roi2,roi3,... \n')
+    str_name=input('Provide the name of the structures contoured in each dicom file (example: GTV,CTV etc) \n')
     dcm_list=dcm_list.split(',')
-    #roi_list=roi_list.split(',')
-    roi_list=['Target','Target']
-    num_of_str=len(roi_list)
+    num_of_str=len(dcm_list)
+    
+    ########## CONTOUR EXTRACTION & ANALYSIS ############
     
     for i in range(num_of_str):
       
-      ############ Analyze contour ###############
       #First create a polygon object
-      poly_contours=CreatePolygon(dcm_list[i],roi_list[i])
+      poly_contours=CreatePolygon(dcm_list[i],str_name)
       
       #Now merge any multi polygons in the same slice
       p,ind=MergeMultiContours(poly_contours)
+      
       #Calculate the average gradient change of the contour 
       dg=ExtractBoundGradChange(p)
+      
       #Calculate the structure volume
       v=ExtractVolume(p)
       
+      #Append the polygon lists, gradient changes and volumes for each structure to a poly list
       poly.append(p)
       DGrad_av.append(dg)
       vol.append(v)
     
-    jac_ind,Jaccard_av=Jaccard(poly)
+    ############# SIMILARITY METRICS ##################
+    # Calculate the Jaccard similarity index per slice (jac_ind), the average Jaccard
+    # and the weighted average Jaccard.
+    jac_ind,Jaccard_av,Jaccard_wav=Jaccard(poly)
     
+    #Calculate the Haussdorf dictionary which includes max, mean and std of the 
+    # Haussdorf distance for all slices. 
+    Haus_dict=HausdorffDict(poly)
+    
+    ############# USER OUTPUT ################
+    
+    print('----------CONTOUR ANALYSIS----------\n')
     for i in range(num_of_str):     
-        print('----------CONTOUR ANALYSIS----------\n')
-        print('Structure',roi_list[i],'of dicom file',dcm_list[i],' has volume of: ', vol[i],' mm^3 \n and an average gradient change of: ', DGrad_av[i],' degrees \n')
+        print('Structure',str_name,'of dicom file',dcm_list[i],' has volume of: ', vol[i],' mm^3 \n and an average gradient change of: ', DGrad_av[i],' degrees \n')
         
-        
-    print('The average Jaccard index of all slices is equal to: \n', Jaccard_av)
-    print('The Jaccard index per slice is: \n',jac_ind)
-    print('The z-slice index is: \n',poly_contours['z-slice'])   
+    print('The CT slices (z - mm) contoured were: \n',poly_contours['z-slice']) 
+    print('The Jaccard similarity indices per slice were: \n',jac_ind)
+    print('The average and weighted average Jaccard indices were: \n', Jaccard_av,Jaccard_wav)
+    print('The Hausdorff metrics were: ',Haus_dict)
+    
+    ########### FILE OUTPUT ##################
+    
+    
      
         
 if __name__ == '__main__':
