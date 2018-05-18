@@ -13,12 +13,16 @@ import numpy as np
 from shapely.geometry import Polygon
 
 def ReadContourStructures(DCM):
-    # Function ReadContour: accepts a dicom (.dcm) file and returns a dictionary
-    # with all the existing contours in the plan.
-    
-    ds=dicom.read_file(DCM) # first read .dcm file
+    # FUNCTION READCONTOURSTRUCTURES: Reads a dicom (.dcm) file and returns 
+    #a dictionary with contour information including colour, name and contour data
+    #Contour data include all the (x,y,z) data points used to build the contour
     contours=[]
+    
+    #First read the dicom file    
+    ds=dicom.read_file(DCM)
     num_of_contours=len(ds.ROIContourSequence)
+    
+    #Extract contour color,name and data points
     for i in range(num_of_contours):
         contour={}
         contour['color']=ds.ROIContourSequence[i].ROIDisplayColor
@@ -29,19 +33,20 @@ def ReadContourStructures(DCM):
     return contours
 
     
-def FindContour(contours,roi_name):
-   #Function ReadContourPoints: accepts the dicom read structure and contour names
-   # (output for ReadContourNames and returns an array with all the contour 
-   #points for each slice z.
+def FindContour(contours,str_name):
+   #FUNCTION FINDCONTOUR: Finds a structure with name str_name in the contour 
+   #dictionary. Output of function ReadContourStructures
    
       
    # First the user asks for a contour and we verify that the name exists in 
    # the contour list
    
-   name_agrees=[roi_name==contour['name'] for contour in contours]
+   name_agrees=[str_name==contour['name'] for contour in contours]
+   
+   #If the name is found return a positive 
    if sum(name_agrees)==1:
         contour_ind=name_agrees.index(1)
-        print('The contour', roi_name,' has been selected\n')
+        print('The contour', str_name,' has been selected\n')
         return contour_ind
    else:
         print('Name not found. Restart and provide a structure name from the list below\n') 
@@ -50,7 +55,9 @@ def FindContour(contours,roi_name):
     
 
 def ExtractContourPoints(contours,contour_ind):
-       #initialization 
+       #FUNCTION EXTRACTCONTOURPOINTS: Reads from the contour dictionary the 
+       #x,y,z coordinates for th structure selected and returns them in a new dictionary coord
+       
        x_data=[]
        y_data=[]
        z_data=[]
@@ -83,11 +90,17 @@ def ExtractContourPoints(contours,contour_ind):
        return coord
         
 def CreatePolygonList(coord):
-        #initialize lists and dictionaries
+        #FUNCTION CREATEPOLYGONLIST: For each contour of the structure 
+        #creates a Polygon object using the shapely.geometry library. Thus each contour
+        #will becomea Polygon object. Creates and returns a dictionary (poly_contours)
+        #with key element: 'polygons' which has a list of the contour/Polygon objects per slice
+        #and 'z-slice' which has the CT slice z index (mm) that each contour exists. 
+        
         poly_list=[]
         poly_z=[]
         poly_contours={}
-
+        
+        #First get the number of contours we have in the structure
         num_contours=len(coord['x'])
         
         # for each contour slice (z) read the x,y coordinates and create a polygon 
@@ -97,9 +110,12 @@ def CreatePolygonList(coord):
             
             poly_crds=[]
             for j in range(num_crds):
+                #Get the x,y coordinates for each z-slice
                 poly_crds.append((coord['x'][i][j],coord['y'][i][j]))
             
+            #Append the z-slice
             poly_z.append(coord['z'][i][j])
+            #Create a Polygon object based on the coordinates
             poly_contour=Polygon(poly_crds)
             poly_list.append(poly_contour)
             
@@ -111,6 +127,12 @@ def CreatePolygonList(coord):
         return poly_contours
     
 def CreatePolygon(dcm,roi_name):
+    # FUNCTION CREATEPOLYGON: This function performs the follwoing sequentially:
+    #first reads a dicom file and extracts the structure, then returns the (x,y,z)
+    #coordinates dictionary and finally return the poly_contours dictionary which
+    #includes the list of all polygon contours per slice and the z-slices where the
+    #contours exist. This function is the main building block for the rest of the code
+    #since all the analysis and metrics will be done on the poly_contours 
     
     #First read all contour structures
     contours=ReadContourStructures(dcm)
@@ -129,26 +151,31 @@ def CreatePolygon(dcm,roi_name):
     return poly_contours
 
 def MergeMultiContours(poly_contours):
-    #Merges multi contours that exist in the same slice to one unified contour.
-    #This serves also as a clean-up method fot he existance of small contour dots
+    #FUNCTION MERGEMULTICONTOURS: Merges multi contours that exist in the same 
+    #slice to one unified contour. This method is needed in the cases where 
+    #multiple contours exist in the same slice. This also serves either as 
+    #clean-up method for the existance of small dots left by the physician accidentally.
     
+    #First extract the z CT slice indices and polygon objects for the structure.
     z=poly_contours['z-slice']
     poly=poly_contours['polygons']
     ind=[]
     
-    #First find the index for the z slices that equal uniify the polygons. 
-    #This returns a multi-polygon structure
+    #Then find the z-index that is equal to the next one. This means 
+    #that there are 2 contours sharing the same z index. Perform a union operation
+    #on the polygons of that slice to create one unified contour. 
     
     for i in range(len(z)-1):
       if z[i]==z[i+1]:
         poly[i+1]=poly[i+1].union(poly[i])
         ind.append(i)
         
+    #Finally delete the extra contours and slice indices after unification. 
+    #We should only have unique z-slice indices from now on. 
     
     for i in ind:
         del poly_contours['z-slice'][i],poly_contours['polygons'][i]
         
-                          
     return poly_contours,ind
     
         
