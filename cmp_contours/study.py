@@ -1,12 +1,5 @@
-#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
-"""
-Created on Mon Mar 19 09:45:22 2018
 
-@author: pavlos
-"""
-
-from __future__ import absolute_import, division, print_function
 import pydicom as dicom
 import math
 import numpy as np
