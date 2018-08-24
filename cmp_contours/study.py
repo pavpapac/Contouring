@@ -7,12 +7,13 @@ from shapely.geometry import Polygon
 
 
 def ReadContourStructures(DCM):
-    # FUNCTION READCONTOURSTRUCTURES: Reads a dicom (.dcm) file and returns
-    # a dictionary with contour information including colour, name and contour data
-    # Contour data include all the (x,y,z) data points used to build the contour
+    """Reads a dicom (.dcm) file and returns a dictionary with contour information.
+
+    The information including colour, name and contour data Contour data
+    include all the (x,y,z) data points used to build the contour
+    """
     contours = []
 
-    # First read the dicom file
     ds = dicom.read_file(DCM)
     num_of_contours = len(ds.ROIContourSequence)
 
@@ -29,11 +30,12 @@ def ReadContourStructures(DCM):
 
 
 def FindContour(contours, str_name):
-    # FUNCTION FINDCONTOUR: Finds a structure with name str_name in the contour
-    # dictionary. Output of function ReadContourStructures
+    """Finds a structure with name str_name in the contour dictionary.
 
-    # First the user asks for a contour and we verify that the name exists in
-    # the contour list
+    First the user asks for a contour and we verify that the name exists in
+    the contour list.
+    Outputs ReadContourStructures
+    """
 
     name_agrees = [str_name == contour['name'] for contour in contours]
 
@@ -49,10 +51,12 @@ def FindContour(contours, str_name):
 
 
 def ExtractContourPoints(contours, contour_ind):
-    # FUNCTION EXTRACTCONTOURPOINTS: Reads from the contour dictionary the
-    # x,y,z coordinates for each the structure slice and returns them
-    # in a new dictionary coord. The output will be later used to create
-    # a Polygon object
+    """ Transform the contour matrix.
+
+    Reads from the contour dictionary the x,y,z coordinates for each the
+    structure slice and returns them in a new dictionary coordinates. The
+    output will be later used to create a Polygon object
+    """
 
     x_data = []
     y_data = []
@@ -87,11 +91,14 @@ def ExtractContourPoints(contours, contour_ind):
 
 
 def CreatePolygonList(coord):
-        # FUNCTION CREATEPOLYGOLIST: For each contour of the structure
-        # creates a Polygon object using the shapely.geometry library. Thus each contour
-        # slice will become a Polygon object. Creates and returns a dictionary (poly_contours)
-        # with key element: 'polygons' which has a list of the contour/Polygon objects per slice
-        # and 'z-slice' which has the CT slice z index (mm) that each contour exists.
+    """For each contour of the structure creates a Polygon object.
+
+    Using the shapely.geometry library to build the object, each contour slice
+    will become a Polygon object. Creates and returns a dictionary
+    (poly_contours) with key element: 'polygons' which has a list of the
+    contour/Polygon objects per slice and 'z-slice' which has the CT slice z
+    index (mm) that each contour exists.
+    """
 
     poly_contourlist = []
     poly_z = []
@@ -122,12 +129,16 @@ def CreatePolygonList(coord):
 
 
 def CreatePolygon(dcm, roi_name):
-    # FUNCTION CREATEPOLYGON: This function performs the follwoing sequentially:
-    # first reads a dicom file and extracts the structure, then returns the (x,y,z)
-    # coordinates dictionary and finally return the poly_contours dictionary which
-    # includes the list of all polygon contours per slice and the z-slices where the
-    # contours exist. This function is the main building block for the rest of the code
-    # since all the analysis and metrics will be done on the poly_contours
+    """ Create a Polygon from the dicom file.
+    This function performs the follwoing sequentially:
+    * reads a dicom file and extracts the structure
+    * returns the (x,y,z) coordinates dictionary
+    * returns the poly_contours dictionary which includes the list of all
+    polygon contours per slice and the z-slices where the contours exist.
+
+    This function is the main building block for the rest of the code since all
+    the analysis and metrics will be done on the poly_contours
+    """
 
     # First read all contour structures
     contours = ReadContourStructures(dcm)
@@ -147,10 +158,12 @@ def CreatePolygon(dcm, roi_name):
 
 
 def MergeMultiContours(poly_contours):
-    # FUNCTION MERGEMULTICONTOURS: Merges multi contours that exist in the same
-    # slice to one unified contour. This method is needed in the cases where
-    # multiple contours exist in the same slice. This also serves either as
-    # clean-up method for the existance of small dots left by the physician accidentally.
+    """Merges multi contours that exist in the same slice to one unified contour.
+
+    This method is needed in the cases where multiple contours exist in the
+    same slice. This also serves either as clean-up method for the existance of
+    small dots left by the physician accidentally.
+    """
 
     # First extract the z CT slice indices and polygon objects for the structure.
     z = poly_contours['z-slice']
@@ -291,12 +304,14 @@ def ExtractUnionPoly(polyA, polyB):
 
 
 def HausdorffMetrics(polyA, polyB):
-    # FUNCTION HAUSDORFF: Calculates the Haussdorff distances for each contour slice
-    # between two polygon lists. Returns the max,mean and std of all Hausdorf distances.
-    # Hausdorff distance is defined as: maximum distance of the closest point between
-    # two contours.
+    """ Calculates the Haussdorff distances for each contour slice.
 
-    # Initialization
+    Hausdorff distance is defined as: maximum distance of the closest point
+    between two contours.
+
+    Returns the max, mean and std of all Hausdorff distances.
+    """
+
     H = []
 
     # Now calculate the Hausdorff distance of the contours for each slice
@@ -335,7 +350,6 @@ def CentroidDist(polyA, polyB):
 
 def TotalNumSlicesContoured(poly):
 
-    # Initiliazation
     minz = 10000
     maxz = -10000
 
@@ -357,12 +371,16 @@ def TotalNumSlicesContoured(poly):
 
 
 def Jaccard(poly):
-    # FUNCTION JACCARD: Given a list of poly_contours objects (output of CreatePolygon)
-    # calculates the intersection and union areas for all contours per slice.
-    # It then extracts the Jaccard index defined as intersection area/union area
-    # per slice. It also calculates the average Jaccard index and the average
-    # Jaccard excluding all slices were at least one physician did not contour anything.
-    # The later helps us evaluate how well physicians perform in the slices they all contoured.
+    """calculates the intersection and union areas for all contours per slice.
+
+    Given a list of poly_contours objects (output of CreatePolygon) calculates
+    the intersection and union areas for all contours per slice. It extracts
+    the Jaccard index defined as intersection area/union area per slice. It
+    also calculates the average Jaccard index and the average Jaccard excluding
+    all slices were at least one physician did not contour anything. The later
+    helps us evaluate how well physicians perform in the slices they all
+    contoured.
+    """
 
     poly_inter = 0
     poly_union = 0
@@ -421,16 +439,18 @@ def Jaccard(poly):
 
 
 def HausdorffDict(poly):
-    # FUNCTION HAUSDORFF POLY():
-    # Given a list of poly_contour objects returns the max, mean and std Haussdorf
-    # distance for all combinations (order selection does not matter here).
-    # For example calculates Haussdorf for structure 1 with 2,3.. structure 2 with 3,4..etc etc
-    # INPUT: poly is a list of Polygon contour objects as created by the CreatePolygon() method.
-    # OUTPUT: Dictionary with derived hausdorff metrics (max,mean,std) for each comparison performed.
-    # Thus, the length of each key in the dictionary should be equal to the total number
-    # of combinations possible.
+    """Returns the max, mean and std Haussdorf distance for all combinations
 
-    # Initialization
+     Given a list of poly_contour objects returns the max, mean and std
+    Hausdorff distance for all combinations (order selection does not matter
+    here). For example calculates Haussdorf for structure 1 with 2,3..
+    structure 2 with 3,4..etc etc INPUT: poly is a list of Polygon contour
+    objects as created by the CreatePolygon() method. OUTPUT: Dictionary with
+    derived hausdorff metrics (max,mean,std) for each comparison performed.
+    Thus, the length of each key in the dictionary should be equal to the total
+    number of combinations possible.
+    """
+
     Haus_dict = {'max': [], 'mean': [], 'std': []}
 
     # We first perform a loop over all structures (poly). For each structure (pi) we will
@@ -469,12 +489,10 @@ def CentroidDict(poly):
 
 def main():
 
-    ########## INITIALIZATION ##############
     poly = []
     DGrad_av = []
     vol = []
 
-    ############## USER INPUT ##############
     dcm_list = input(
         'Provide the names of all dicom files to be analyzed (format dcm1,dcm2,dcm3,...) \n')
     str_name = input(
@@ -482,41 +500,31 @@ def main():
     dcm_list = dcm_list.split(',')
     energy = input('Provide the energy of the CT (40 or 65 keV) \n')
 
-    ########## CONTOUR EXTRACTION & ANALYSIS ############
-
+    # First create a polygon object
+    # Merge any multi polygons in the same slice
+    # Calculate the average gradient change of the contour
+    # Calculate the structure volume
+    # Append the polygon lists, gradient changes and volumes for each structure to a poly list
     for dcm in dcm_list:
-
-        # First create a polygon object
         poly_contours = CreatePolygon(dcm, str_name)
-
-        # Now merge any multi polygons in the same slice
         p, ind = MergeMultiContours(poly_contours)
-
-        # Calculate the average gradient change of the contour
         dg, t = ExtractBoundGradChange(p)
-
-        # Calculate the structure volume
         v = ExtractVolume(p)
-
-        # Append the polygon lists, gradient changes and volumes for each structure to a poly list
         poly.append(p)
         DGrad_av.append(dg)
         vol.append(v)
 
-    ############# SIMILARITY METRICS ##################
-    # Calculate the Jaccard similarity index per slice (jac_ind), the average Jaccard
-    # and the weighted average Jaccard.
+    # Calculate the Jaccard similarity index per slice (jac_ind), the average
+    # Jaccard and the weighted average Jaccard.
     perc_common_zslices, jac_ind, Jaccard_av, Jaccard_av_common = Jaccard(poly)
 
     # Calculate the Haussdorf dictionary which includes max, mean and std of the
-    # Haussdorf distance for all slices.
+    # Hausdorff distance for all slices.
     Haus_dict = HausdorffDict(poly)
 
     # Calculate the centroid dictionary which includes the max,mean and std distances
     # between the contours for all slices
     Centroid_dict = CentroidDict(poly)
-
-    ############# USER OUTPUT ################
 
     print('----------CONTOUR ANALYSIS----------\n')
     for dcm, v, g in zip(dcm_list, vol, DGrad_av):
@@ -532,14 +540,9 @@ def main():
     print(f'The Hausdorff distance metrics were ', Haus_dict)
     print(f'The centroid misalignment metrics were ', Centroid_dict)
 
-    ########### FILE OUTPUT ##################
-    # First open the file in append mode
-    f = open('HNSCC.out', 'a+')
-
     # Now prepare the data to be written in a textfile by converting numbers to
     # strings. Caclualte also here any specific metrics you prefer saving in the
     # file.
-
     Vav = str(np.mean(vol))
     Vstd = str(np.std(vol))
     Gav = str(np.mean(DGrad_av))
@@ -555,7 +558,7 @@ def main():
     Cstd = str(Centroid_dict['std'][0])
 
     # Now write the output values in the file line-by-line
-
+    f = open('HNSCC.out', 'a+')
     f.write(energy+','+Vav+','+Vstd+','+Gav+','+Gstd+','+Jav+','+Jav_cmn +
             ','+Hmax+','+Hmean+','+Hstd+','+Cmax+','+Cmean+','+Cstd+'\n')
     f.close()
