@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 
-import pydicom as dicom
 import math
+from pathlib import Path
+
+import click
 import numpy as np
+import pydicom as dicom
 from shapely.geometry import Polygon
 
 
@@ -40,6 +43,7 @@ def FindContour(contours, str_name):
     name_agrees = [str_name == contour['name'] for contour in contours]
 
     # If the name is found return a positive
+    # TODO Remove the print functions
     if sum(name_agrees) == 1:
         contour_ind = name_agrees.index(1)
         print('The contour', str_name, ' has been selected\n')
@@ -103,9 +107,6 @@ def CreatePolygonList(coord):
     poly_contourlist = []
     poly_z = []
     poly_contours = {}
-
-    # First get the number of contours we have in the structure
-    # num_contours=len(coord['x'])
 
     # For each structure slice extract the x,y coordinates and return them
     # in a list of tuples (x,y). This is then used to create the Polygon object
@@ -487,18 +488,34 @@ def CentroidDict(poly):
     return Centroid_dict
 
 
-def main():
+@click.command()
+@click.option('--folder',
+              default='.',
+              envvar='CONTOUR_PATH',
+              help='Root path to the dicom')
+@click.option('--files',
+              type=click.Path(),
+              multiple=True,
+              help='Specific dicom files')
+@click.argument('structure', type=click.STRING)
+@click.argument('energy', type=click.INT)
+def main(folder, files, structure, energy):
+    """ The program compares the structures found in different images in a dicom file(s).
+    """
 
     poly = []
     DGrad_av = []
     vol = []
 
-    dcm_list = input(
-        'Provide the names of all dicom files to be analyzed (format dcm1,dcm2,dcm3,...) \n')
-    str_name = input(
-        'Provide the name of the structures contoured in each dicom file (example: GTV,CTV etc) \n')
-    dcm_list = dcm_list.split(',')
-    energy = input('Provide the energy of the CT (40 or 65 keV) \n')
+    root = Path(folder)
+    if not root.is_dir():
+        raise click.ClickException('The folder provided is not accessible')
+
+    dcm_list = []
+    if files:
+        dcm_list = [root / x for x in files]
+    else:
+        dcm_list = root.glob('*.dicom')
 
     # First create a polygon object
     # Merge any multi polygons in the same slice
@@ -506,13 +523,19 @@ def main():
     # Calculate the structure volume
     # Append the polygon lists, gradient changes and volumes for each structure to a poly list
     for dcm in dcm_list:
-        poly_contours = CreatePolygon(dcm, str_name)
+        if not dcm.is_file():
+            click.echo(f'File {dcm} does not exists')
+            continue
+        poly_contours = CreatePolygon(dcm, structure)
         p, ind = MergeMultiContours(poly_contours)
         dg, t = ExtractBoundGradChange(p)
         v = ExtractVolume(p)
         poly.append(p)
         DGrad_av.append(dg)
         vol.append(v)
+
+    if poly == []:
+        raise click.ClickException('No contour(s) found in the files specified')
 
     # Calculate the Jaccard similarity index per slice (jac_ind), the average
     # Jaccard and the weighted average Jaccard.
@@ -526,19 +549,17 @@ def main():
     # between the contours for all slices
     Centroid_dict = CentroidDict(poly)
 
-    print('----------CONTOUR ANALYSIS----------\n')
+    click.echo('----------CONTOUR ANALYSIS----------')
     for dcm, v, g in zip(dcm_list, vol, DGrad_av):
-        print('Structure', str_name, 'of dicom file', dcm, ' has volume of: ',
-              v, ' mm^3 \n and an average gradient change of: ', g, ' degrees \n')
+        click.echo(f'Structure {str_name} of dicom file {dcm} has volume of: {v} mm^3')
+        click.echo(f'And an average gradient change of: {g} degrees')
 
-    print(
-        f'The percentage of CT slices contoured by all physicians was: {perc_common_zslices:0.2f} % \n')
-    print(f'The Jaccard similarity indices per slice were: \n', jac_ind)
-    print(f'The average Jaccard index was: {Jaccard_av:0.2f} \n')
-    print(
-        f'The average Jaccard index for all the common slices contoured was: {Jaccard_av_common:0.2f} \n')
-    print(f'The Hausdorff distance metrics were ', Haus_dict)
-    print(f'The centroid misalignment metrics were ', Centroid_dict)
+    click.echo(f'The percentage of CT slices contoured by all physicians: {perc_common_zslices:0.2f} %')
+    click.echo(f'The Jaccard similarity indices per slice: {jac_ind}')
+    click.echo(f'The average Jaccard index: {Jaccard_av:0.2f}')
+    click.echo(f'And for all the common slices contoured: {Jaccard_av_common:0.2f}')
+    click.echo(f'The Hausdorff distance metrics: {Haus_dict}')
+    click.echo(f'The centroid misalignment metrics: {Centroid_dict}')
 
     # Now prepare the data to be written in a textfile by converting numbers to
     # strings. Caclualte also here any specific metrics you prefer saving in the
