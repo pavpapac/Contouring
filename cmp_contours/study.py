@@ -43,7 +43,7 @@ def FindContour(contours, str_name):
     name_agrees = [str_name == contour['name'] for contour in contours]
 
     # If the name is found return a positive
-    # TODO Remove the print functions
+    # TODO Trow exception on which index to use
     if sum(name_agrees) == 1:
         contour_ind = name_agrees.index(1)
         print('The contour', str_name, ' has been selected\n')
@@ -110,7 +110,8 @@ def CreatePolygonList(coord):
 
     # For each structure slice extract the x,y coordinates and return them
     # in a list of tuples (x,y). This is then used to create the Polygon object
-    # The z coordinates are always the same for each slice so just keep the first element.
+    # The z coordinates are always the same for each slice
+    # so just keep the first element.
 
     for xsl, ysl, zsl in zip(coord['x'], coord['y'], coord['z']):
         poly_xycrds = []
@@ -515,7 +516,7 @@ def main(folder, files, structure, energy):
     if files:
         dcm_list = [root / x for x in files]
     else:
-        dcm_list = root.glob('*.dicom')
+        dcm_list = list(root.glob('*.dcm'))
 
     # First create a polygon object
     # Merge any multi polygons in the same slice
@@ -526,7 +527,7 @@ def main(folder, files, structure, energy):
         if not dcm.is_file():
             click.echo(f'File {dcm} does not exists')
             continue
-        poly_contours = CreatePolygon(dcm, structure)
+        poly_contours = CreatePolygon(dcm.name, structure)
         p, ind = MergeMultiContours(poly_contours)
         dg, t = ExtractBoundGradChange(p)
         v = ExtractVolume(p)
@@ -551,7 +552,7 @@ def main(folder, files, structure, energy):
 
     click.echo('----------CONTOUR ANALYSIS----------')
     for dcm, v, g in zip(dcm_list, vol, DGrad_av):
-        click.echo(f'Structure {str_name} of dicom file {dcm} has volume of: {v} mm^3')
+        click.echo(f'Structure {structure} of dicom file {dcm.name} has volume of: {v} mm^3')
         click.echo(f'And an average gradient change of: {g} degrees')
 
     click.echo(f'The percentage of CT slices contoured by all physicians: {perc_common_zslices:0.2f} %')
@@ -580,7 +581,7 @@ def main(folder, files, structure, energy):
 
     # Now write the output values in the file line-by-line
     f = open('HNSCC.out', 'a+')
-    f.write(energy+','+Vav+','+Vstd+','+Gav+','+Gstd+','+Jav+','+Jav_cmn +
+    f.write(str(energy)+','+Vav+','+Vstd+','+Gav+','+Gstd+','+Jav+','+Jav_cmn +
             ','+Hmax+','+Hmean+','+Hstd+','+Cmax+','+Cmean+','+Cstd+'\n')
     f.close()
 
